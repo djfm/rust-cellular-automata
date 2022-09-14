@@ -1,209 +1,125 @@
-const SQUARE_SIZE: u32 = 8;
-use sdl2::{
-    pixels::Color,
-    event::Event,
-    keyboard::Keycode,
-    rect::{Rect, Point},
-    mouse::MouseButton,
-};
-use sdl2::render::{Canvas, Texture, TextureCreator};
-use sdl2::video::{Window, WindowContext};
+use three_d::*;
 
-trait Game: Sized {
-    fn new() -> Self;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let window = Window::new(WindowSettings {
+        title: "Shapes!".to_string(),
+        max_size: Some((1280, 720)),
+        ..Default::default()
+    })?;
+    let context = window.gl();
 
-    fn toggle_state(&mut self);
+    let mut camera = Camera::new_perspective(
+        window.viewport(),
+        vec3(5.0, 2.0, 2.5),
+        vec3(0.0, 0.0, -0.5),
+        vec3(0.0, 1.0, 0.0),
+        degrees(45.0),
+        0.1,
+        1000.0,
+    );
+    let mut control = OrbitControl::new(*camera.target(), 1.0, 100.0);
 
-    fn dummy_texture<'a>(
-        canvas: &mut Canvas<Window>,
-        texture_creator: &'a TextureCreator<WindowContext>,
-    ) -> Result<(Texture<'a>, Texture<'a>), String> {
-        enum TextureColor {
-            Yellow,
-            White,
-        }
-        let mut square_texture1 = texture_creator
-        .create_texture_target(None, SQUARE_SIZE, SQUARE_SIZE)
-        .map_err(|e| e.to_string())?;
-        let mut square_texture2 = texture_creator
-        .create_texture_target(None, SQUARE_SIZE, SQUARE_SIZE)
-        .map_err(|e| e.to_string())?;
-        // let's change the textures we just created
-        {
-            let textures = vec![
-            (&mut square_texture1, TextureColor::Yellow),
-            (&mut square_texture2, TextureColor::White),
-            ];
-            canvas
-            .with_multiple_texture_canvas(textures.iter(), |texture_canvas, user_context| {
-                texture_canvas.set_draw_color(Color::RGB(0, 0, 0));
-                texture_canvas.clear();
-                match *user_context {
-                    TextureColor::Yellow => {
-                        for i in 0..SQUARE_SIZE {
-                            for j in 0..SQUARE_SIZE {
-                                if (i + j) % 4 == 0 {
-                                    texture_canvas.set_draw_color(Color::RGB(255, 255, 0));
-                                    texture_canvas
-                                    .draw_point(Point::new(i as i32, j as i32))
-                                    .expect("could not draw point");
-                                }
-                                if (i + j * 2) % 9 == 0 {
-                                    texture_canvas.set_draw_color(Color::RGB(200, 200, 0));
-                                    texture_canvas
-                                    .draw_point(Point::new(i as i32, j as i32))
-                                    .expect("could not draw point");
-                                }
-                            }
-                        }
-                    }
-                    TextureColor::White => {
-                        for i in 0..SQUARE_SIZE {
-                            for j in 0..SQUARE_SIZE {
-                                // drawing pixel by pixel isn't very effective, but we only do it once and store
-                                // the texture afterwards so it's still alright!
-                                if (i + j) % 7 == 0 {
-                                    // this doesn't mean anything, there was some trial and error to find
-                                    // something that wasn't too ugly
-                                    texture_canvas.set_draw_color(Color::RGB(192, 192, 192));
-                                    texture_canvas
-                                    .draw_point(Point::new(i as i32, j as i32))
-                                    .expect("could not draw point");
-                                }
-                                if (i + j * 2) % 5 == 0 {
-                                    texture_canvas.set_draw_color(Color::RGB(64, 64, 64));
-                                    texture_canvas
-                                    .draw_point(Point::new(i as i32, j as i32))
-                                    .expect("could not draw point");
-                                }
-                            }
-                        }
-                    }
-                };
-                for i in 0..SQUARE_SIZE {
-                    for j in 0..SQUARE_SIZE {
-                        // drawing pixel by pixel isn't very effective, but we only do it once and store
-                        // the texture afterwards so it's still alright!
-                        if (i + j) % 7 == 0 {
-                            // this doesn't mean anything, there was some trial and serror to find
-                            // something that wasn't too ugly
-                            texture_canvas.set_draw_color(Color::RGB(192, 192, 192));
-                            texture_canvas
-                            .draw_point(Point::new(i as i32, j as i32))
-                            .expect("could not draw point");
-                        }
-                        if (i + j * 2) % 5 == 0 {
-                            texture_canvas.set_draw_color(Color::RGB(64, 64, 64));
-                            texture_canvas
-                            .draw_point(Point::new(i as i32, j as i32))
-                            .expect("could not draw point");
-                        }
-                    }
-                }
-            })
-            .map_err(|e| e.to_string())?;
-        }
-        Ok((square_texture1, square_texture2))
-    }
+    let mut sphere = Gm::new(
+        Mesh::new(&context, &CpuMesh::sphere(16)),
+        PhysicalMaterial::new_transparent(
+            &context,
+            &CpuMaterial {
+                albedo: Color {
+                    r: 255,
+                    g: 0,
+                    b: 0,
+                    a: 200,
+                },
+                ..Default::default()
+            },
+        ),
+    );
+    sphere.set_transformation(Mat4::from_translation(vec3(0.0, 1.3, 0.0)) * Mat4::from_scale(0.2));
+    let mut cylinder = Gm::new(
+        Mesh::new(&context, &CpuMesh::cylinder(16)),
+        PhysicalMaterial::new_transparent(
+            &context,
+            &CpuMaterial {
+                albedo: Color {
+                    r: 0,
+                    g: 255,
+                    b: 0,
+                    a: 200,
+                },
+                ..Default::default()
+            },
+        ),
+    );
+    cylinder
+        .set_transformation(Mat4::from_translation(vec3(1.3, 0.0, 0.0)) * Mat4::from_scale(0.2));
+    let mut cube = Gm::new(
+        Mesh::new(&context, &CpuMesh::cube()),
+        PhysicalMaterial::new_transparent(
+            &context,
+            &CpuMaterial {
+                albedo: Color {
+                    r: 0,
+                    g: 0,
+                    b: 255,
+                    a: 100,
+                },
+                ..Default::default()
+            },
+        ),
+    );
+    cube.set_transformation(Mat4::from_translation(vec3(0.0, 0.0, 1.3)) * Mat4::from_scale(0.2));
+    let axes = Axes::new(&context, 0.1, 2.0);
+    let bounding_box_sphere = BoundingBox::new_with_material(
+        &context,
+        sphere.aabb(),
+        ColorMaterial {
+            color: Color::BLACK,
+            ..Default::default()
+        },
+    );
+    let bounding_box_cube = BoundingBox::new_with_material(
+        &context,
+        cube.aabb(),
+        ColorMaterial {
+            color: Color::BLACK,
+            ..Default::default()
+        },
+    );
+    let bounding_box_cylinder = BoundingBox::new_with_material(
+        &context,
+        cylinder.aabb(),
+        ColorMaterial {
+            color: Color::BLACK,
+            ..Default::default()
+        },
+    );
 
-    fn update(&mut self);
-}
-struct Automata {
-    playing: bool,
-}
+    let light0 = DirectionalLight::new(&context, 1.0, Color::WHITE, &vec3(0.0, -0.5, -0.5));
+    let light1 = DirectionalLight::new(&context, 1.0, Color::WHITE, &vec3(0.0, 0.5, 0.5));
 
-impl Game for Automata {
-    fn new () -> Automata {
-        Automata {
-            playing: false,
-        }
-    }
+    window.render_loop(move |mut frame_input: FrameInput| {
+        camera.set_viewport(frame_input.viewport);
+        control.handle_events(&mut camera, &mut frame_input.events);
 
-    fn update(&mut self) {
+        frame_input
+            .screen()
+            .clear(ClearState::color_and_depth(0.8, 0.8, 0.8, 1.0, 1.0))
+            .render(
+                &camera,
+                &[
+                    &sphere,
+                    &cylinder,
+                    &cube,
+                    &axes,
+                    &bounding_box_sphere,
+                    &bounding_box_cube,
+                    &bounding_box_cylinder,
+                ],
+                &[&light0, &light1],
+            );
 
-    }
+        FrameOutput::default()
+    });
 
-    fn toggle_state(&mut self) {
-        self.playing = !self.playing;
-    }
-}
-
-
-pub fn main() -> Result<(), String> {
-    let sdl_context = sdl2::init()?;
-    let video_subsystem = sdl_context.video()?;
-    let mut game = Automata::new();
-
-    let window = video_subsystem
-    .window(
-        "rust-sdl2 demo: Game of Life",
-        1600, 1200,
-    )
-    .position_centered()
-    .build()
-    .map_err(|e| e.to_string())?;
-
-    // the canvas allows us to both manipulate the property of the window and to change its content
-    // via hardware or software rendering. See CanvasBuilder for more info.
-    let mut canvas = window
-    .into_canvas()
-    .target_texture()
-    .present_vsync()
-    .build()
-    .map_err(|e| e.to_string())?;
-
-    println!("Using SDL_Renderer \"{}\"", canvas.info().name);
-    canvas.set_draw_color(Color::RGB(0, 0, 0));
-    // clears the canvas with the color we set in `set_draw_color`.
-    canvas.clear();
-    // However the canvas has not been updated to the window yet, everything has been processed to
-    // an internal buffer, but if we want our buffer to be displayed on the window, we need to call
-    // `present`. We need to call this everytime we want to render a new frame on the window.
-    canvas.present();
-
-    let mut event_pump = sdl_context.event_pump()?;
-
-    let mut frame: u32 = 0;
-    'running: loop {
-        // get the inputs here
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => break 'running,
-                Event::KeyDown {
-                    keycode: Some(Keycode::Space),
-                    repeat: false,
-                    ..
-                } => {
-                    game.toggle_state();
-                }
-                Event::MouseButtonDown {
-                    x,
-                    y,
-                    mouse_btn: MouseButton::Left,
-                    ..
-                } => {
-                    let x = (x as u32) / SQUARE_SIZE;
-                    let y = (y as u32) / SQUARE_SIZE;
-
-                }
-                _ => {}
-            }
-        }
-
-        // update the game loop here
-        if frame >= 30 {
-            game.update();
-            frame = 0;
-        }
-
-        canvas.set_draw_color(Color::RGB(0, 0, 0));
-        canvas.clear();
-    }
-
-
-    return Ok(());
+    Ok(())
 }
