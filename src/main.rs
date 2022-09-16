@@ -1,5 +1,9 @@
 use three_d::*;
 
+mod cell_block;
+
+use cell_block::Slice;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window = Window::new(WindowSettings {
         title: "Shapes!".to_string(),
@@ -8,9 +12,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
     let context = window.gl();
 
+
+    let slice = Slice::new(10, 10);
+
+    let mut to_render: Vec<Box<dyn Object>> = vec![];
+    for cell in slice.into_iter(){
+        let color = if cell.value() { Color {
+            r: 0,
+            g: 0,
+            b: 255,
+            a: 100,
+        } } else { Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 100,
+        }};
+
+        let mut cube = Gm::new(
+            Mesh::new(&context, &CpuMesh::cube()),
+            PhysicalMaterial::new_transparent(
+                &context,
+                &CpuMaterial {
+                    albedo: color,
+                    ..Default::default()
+                },
+            ),
+        );
+        cube.set_transformation(
+            Mat4::from_translation(vec3(cell.row(), cell.column(), 1.0)) * Mat4::from_scale(0.2)
+        );
+        to_render.push(Box::new(cube));
+    }
+
     let mut camera = Camera::new_perspective(
         window.viewport(),
-        vec3(5.0, 2.0, 2.5),
+        vec3(5.0, 2.0, 25.0),
         vec3(0.0, 0.0, -0.5),
         vec3(0.0, 1.0, 0.0),
         degrees(45.0),
@@ -18,81 +55,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         1000.0,
     );
     let mut control = OrbitControl::new(*camera.target(), 1.0, 100.0);
-
-    let mut sphere = Gm::new(
-        Mesh::new(&context, &CpuMesh::sphere(16)),
-        PhysicalMaterial::new_transparent(
-            &context,
-            &CpuMaterial {
-                albedo: Color {
-                    r: 255,
-                    g: 0,
-                    b: 0,
-                    a: 200,
-                },
-                ..Default::default()
-            },
-        ),
-    );
-    sphere.set_transformation(Mat4::from_translation(vec3(0.0, 1.3, 0.0)) * Mat4::from_scale(0.2));
-    let mut cylinder = Gm::new(
-        Mesh::new(&context, &CpuMesh::cylinder(16)),
-        PhysicalMaterial::new_transparent(
-            &context,
-            &CpuMaterial {
-                albedo: Color {
-                    r: 0,
-                    g: 255,
-                    b: 0,
-                    a: 200,
-                },
-                ..Default::default()
-            },
-        ),
-    );
-    cylinder
-        .set_transformation(Mat4::from_translation(vec3(1.3, 0.0, 0.0)) * Mat4::from_scale(0.2));
-    let mut cube = Gm::new(
-        Mesh::new(&context, &CpuMesh::cube()),
-        PhysicalMaterial::new_transparent(
-            &context,
-            &CpuMaterial {
-                albedo: Color {
-                    r: 0,
-                    g: 0,
-                    b: 255,
-                    a: 100,
-                },
-                ..Default::default()
-            },
-        ),
-    );
-    cube.set_transformation(Mat4::from_translation(vec3(0.0, 0.0, 1.3)) * Mat4::from_scale(0.2));
-    let axes = Axes::new(&context, 0.1, 2.0);
-    let bounding_box_sphere = BoundingBox::new_with_material(
-        &context,
-        sphere.aabb(),
-        ColorMaterial {
-            color: Color::BLACK,
-            ..Default::default()
-        },
-    );
-    let bounding_box_cube = BoundingBox::new_with_material(
-        &context,
-        cube.aabb(),
-        ColorMaterial {
-            color: Color::BLACK,
-            ..Default::default()
-        },
-    );
-    let bounding_box_cylinder = BoundingBox::new_with_material(
-        &context,
-        cylinder.aabb(),
-        ColorMaterial {
-            color: Color::BLACK,
-            ..Default::default()
-        },
-    );
 
     let light0 = DirectionalLight::new(&context, 1.0, Color::WHITE, &vec3(0.0, -0.5, -0.5));
     let light1 = DirectionalLight::new(&context, 1.0, Color::WHITE, &vec3(0.0, 0.5, 0.5));
@@ -106,15 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .clear(ClearState::color_and_depth(0.8, 0.8, 0.8, 1.0, 1.0))
             .render(
                 &camera,
-                &[
-                    &sphere,
-                    &cylinder,
-                    &cube,
-                    &axes,
-                    &bounding_box_sphere,
-                    &bounding_box_cube,
-                    &bounding_box_cylinder,
-                ],
+                &to_render.iter().map(|o| o.as_ref()).collect::<Vec<&dyn Object>>().as_slice(),
                 &[&light0, &light1],
             );
 
